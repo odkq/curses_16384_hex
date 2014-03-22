@@ -42,7 +42,11 @@ class Board:
         ''' Draw a tile '''
         attr = self.attribs[self._get_color_pair(value)]
         self.screen.addstr(y, x + 1, '    ', attr)
-        self.screen.addstr(y+1, x , str(value).center(6), attr)
+        if (value >= 128):
+            cattr = self._get_color_pair(0)
+        else:
+            cattr = attr
+        self.screen.addstr(y+1, x , str(value).center(6), cattr)
         self.screen.addstr(y+2, x + 1, '    ', attr)
         # chars = str(value).center(4)
         # draw the last row
@@ -65,7 +69,6 @@ class Board:
             show the user in either case. If '' is returned, the game
             continues '''
         blanks = []
-        max = 0
         # check for win
         for y in range(5):
             for x in range(self.width[y]):
@@ -77,8 +80,6 @@ class Board:
             for x in range(self.width[y]):
                 if self.board[y][x] == 0:
                     blanks.append([y, x])
-                elif self.board[y][x] >= max:
-                    max = self.board[y][x]
         # Now put a '2' or a '4' with 10% probability
         # randomly in any of the blanks, but only if a movement was reported
         if some_movement:
@@ -160,20 +161,44 @@ class Board:
 
     def horizontal_transpose(self):
         ''' Transpose all rows left->right right->left '''
+        ''' TODO: Horizontal transposition is the same as three rotations in
+            any direction '''
         for y in range(5):
             width = self.width[y]
             for x in range(width / 2):
                 ax = x
                 bx = width - (x + 1)
-                t = self.board[y][ax]
-                self.board[y][ax] = self.board[y][bx]
-                self.board[y][bx] = t
+                self.exchange(ax, y, bx, y)
 
-    def rotate_clockwise(self):
-        ''' Transpose rotating to the right '''
+    def exchange(self, ax, ay, bx, by):
+        t = self.board[ay][ax]
+        self.board[ay][ax] = self.board[by][bx]
+        self.board[by][bx] = t
 
-    def rotate_counterclockwise(self):
+    def rotate(self, counterclockwise=False):
         ''' Transpose rotating to the right '''
+        clockwise_outer_coords = [[0, 0], [0, 1], [0, 2], [1, 3],
+                                  [2, 4], [3, 3], [4, 2], [4, 1],
+                                  [4, 0], [3, 0], [2, 0], [1, 0]]
+        clockwise_inner_coords = [[1, 1], [1, 2], [2, 3], [3, 2],
+                                  [3, 1], [2, 1]]
+        if counterclockwise:
+            outer_coords = [x for x in reversed(clockwise_outer_coords)]
+            inner_coords = [x for x in reversed(clockwise_inner_coords)]
+        else:
+            outer_coords = clockwise_outer_coords
+            inner_coords = clockwise_inner_coords
+        for coords, times in [[outer_coords, 2], [inner_coords, 1]]:
+            # Rotate three times the outer ring and two times the inner ring
+            for t in range(times):
+                last_element = coords[len(coords) - 1]
+                last_value = self.board[last_element[0]][last_element[1]]
+                for i in reversed(range((len(coords)))):
+                    if i == 0:
+                        value = last_value
+                    else:
+                        value = self.board[coords[i - 1][0]][coords[i - 1][1]]
+                    self.board[coords[i][0]][coords[i][1]] = value
 
     def move_left(self):
         ''' Transpose horizontally, move and retranspose '''
@@ -183,20 +208,32 @@ class Board:
         return ret
 
     def move_upright(self):
-        # TODO
-        return ''
+        self.rotate(counterclockwise=False)
+        ret = self.move_right()
+        self.rotate(counterclockwise=True)
+        return ret
 
     def move_upleft(self):
-        # TODO
+        for i in range(2):
+            self.rotate(counterclockwise=False)
+        ret = self.move_right()
+        for i in range(2):
+            self.rotate(counterclockwise=True)
         return ''
 
     def move_downright(self):
-        # TODO
-        return ''
+        self.rotate(counterclockwise=True)
+        ret = self.move_right()
+        self.rotate(counterclockwise=False)
+        return ret
 
     def move_downleft(self):
-        # TODO
-        return ''
+        for i in range(2):
+            self.rotate(counterclockwise=True)
+        ret = self.move_right()
+        for i in range(2):
+            self.rotate(counterclockwise=False)
+        return ret
 
     def exit(self):
         raise ExitException('quiting')
@@ -213,6 +250,7 @@ def curses_main(stdscr):
             102: Board.move_right,          # f
             120: Board.move_downleft,       # x
             99: Board.move_downright,       # c
+            114: Board.rotate,
             113: Board.exit}
 
     if curses.has_colors():
@@ -224,11 +262,11 @@ def curses_main(stdscr):
                  [curses.COLOR_BLACK, curses.COLOR_YELLOW],
                  [curses.COLOR_BLACK, curses.COLOR_MAGENTA],
                  [curses.COLOR_BLACK, curses.COLOR_RED],
-                 [curses.COLOR_BLACK, curses.COLOR_RED],
-                 [curses.COLOR_BLACK, curses.COLOR_RED],
-                 [curses.COLOR_BLACK, curses.COLOR_RED],
-                 [curses.COLOR_BLACK, curses.COLOR_RED],
-                 [curses.COLOR_BLACK, curses.COLOR_RED],
+                 [curses.COLOR_BLACK, curses.COLOR_CYAN],
+                 [curses.COLOR_BLACK, curses.COLOR_BLUE],
+                 [curses.COLOR_BLACK, curses.COLOR_GREEN],
+                 [curses.COLOR_BLACK, curses.COLOR_YELLOW],
+                 [curses.COLOR_BLACK, curses.COLOR_MAGENTA],
                  [curses.COLOR_BLACK, curses.COLOR_RED],
                  [curses.COLOR_BLACK, curses.COLOR_RED]]
         for i in range(1, 15):
