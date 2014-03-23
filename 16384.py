@@ -19,6 +19,7 @@
  You should have received a copy of the GNU General Public License
  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
+import copy
 import curses
 import random
 
@@ -42,11 +43,18 @@ class Board:
         ''' Draw a tile '''
         attr = self.attribs[self._get_color_pair(value)]
         self.screen.addstr(y, x + 1, '    ', attr)
+        self.screen.addstr(y+1, x , '      ', attr)
         if (value >= 128):
             cattr = self._get_color_pair(0)
         else:
             cattr = attr
-        self.screen.addstr(y+1, x , str(value).center(6), cattr)
+        if len(str(value)) > 4:
+            centerin = 6
+            offset = 0
+        else:
+            centerin = 4
+            offset = 1
+        self.screen.addstr(y+1, x + offset, str(value).center(centerin), cattr)
         self.screen.addstr(y+2, x + 1, '    ', attr)
         # chars = str(value).center(4)
         # draw the last row
@@ -62,7 +70,7 @@ class Board:
                 px = (x * 8) + 1 + ((5 - self.width[y])*4)
                 py = (y * 4) + 1
                 self.draw_tile(px, py, value)
-        self.screen.addstr(4, 72, str(self.score).center(6))
+        self.screen.addstr(5, 72, str(self.score).center(6))
 
     def check_win(self, some_movement):
         ''' Check for winning/loosing condition, returning a string to
@@ -73,9 +81,8 @@ class Board:
         for y in range(5):
             for x in range(self.width[y]):
                 if self.board[y][x] == 16384:
-                    return 'You won!'
-        # check for loose (no 0es) while filling an array of blanks
-        # to put a 2 in the next turn
+                    return 'You won! Press q to exit'
+        # fill an array with the blanks found
         for y in range(5):
             for x in range(self.width[y]):
                 if self.board[y][x] == 0:
@@ -91,17 +98,17 @@ class Board:
         if len(blanks) == 0:
             # If an addition can be made, then it is not a loose yet
             lost = True
-            # TODO: use new conditions
-            #for y in range(4):
-            #    for x in range(3):
-            #        if self.board[y][x + 1] == self.board[y][x]:
-            #            lost = False
-            #for x in range(4):
-            #    for y in range(3):
-            #        if self.board[y + 1][x] == self.board[y][x]:
-            #            lost = False
+            testboard = copy.deepcopy(self.board)   # Make a copy for testing
+            # Simulate all movements over the temp board
+            # and see if there is any addition
+            for move_function in [self.move_right, self.move_left,
+                                  self.move_upleft, self.move_upright,
+                                  self.move_downleft, self.move_downright]:
+                if move_function(testboard):
+                    lost = False
+                    break
             if lost:
-                return 'You loose!'
+                return 'You loose! Press q to exit'
         return ''
 
     def _get_color_pair(self, value):
@@ -112,70 +119,57 @@ class Board:
                 return (i + 1)
         return 1
 
-    def move_row(self, row, width):
+    def move_row(self, row, width, board):
         ''' Try to move elements from left to right, return true if a
             movement happened '''
         moved = False
         for x in range(width - 1):
-            t = self.board[row][x]
+            t = board[row][x]
             if t == 0:
                 continue
-            if self.board[row][x + 1] == 0:
-                self.board[row][x] = 0
-                self.board[row][x + 1] = t
+            if board[row][x + 1] == 0:
+                board[row][x] = 0
+                board[row][x + 1] = t
                 moved = True
         return moved
 
-    def add_row(self, row, width):
+    def add_row(self, row, width, board):
         ''' Try to add elements right-to-left, return true if an addition
             happened '''
         added = False
         x = width - 1
         while x > 0:
-            if self.board[row][x] == 0:
+            if board[row][x] == 0:
                 x -= 1
                 continue
-            if self.board[row][x - 1] == self.board[row][x]:
-                self.board[row][x] = (self.board[row][x]) * 2
-                self.board[row][x - 1] = 0
-                self.score += self.board[row][x]
+            if board[row][x - 1] == board[row][x]:
+                board[row][x] = (board[row][x]) * 2
+                board[row][x - 1] = 0
+                if id(board) == id(self.board):
+                    self.score += board[row][x]
                 added = True
             x -= 1
         return added
 
-    def move_right(self):
+    def move_right(self, board=None):
         ''' Perform a right movement. The rest of movements end up
-            doing this after transposing the board '''
+            doing this after rotating the board '''
+        if board is None:
+            board = self.board
         some_movement = False
         for y in range(5):
             added = False
             moved = True
             while (moved and not added):
-                added = self.add_row(y, self.width[y])
-                moved = self.move_row(y, self.width[y])
+                added = self.add_row(y, self.width[y], board)
+                moved = self.move_row(y, self.width[y], board)
                 if added or moved:
                     some_movement = True
             if added:
-                moved = self.move_row(y, self.width[y])
+                moved = self.move_row(y, self.width[y], board)
         return some_movement
 
-    def horizontal_transpose(self):
-        ''' Transpose all rows left->right right->left '''
-        ''' TODO: Horizontal transposition is the same as three rotations in
-            any direction '''
-        for y in range(5):
-            width = self.width[y]
-            for x in range(width / 2):
-                ax = x
-                bx = width - (x + 1)
-                self.exchange(ax, y, bx, y)
-
-    def exchange(self, ax, ay, bx, by):
-        t = self.board[ay][ax]
-        self.board[ay][ax] = self.board[by][bx]
-        self.board[by][bx] = t
-
-    def rotate(self, counterclockwise=False):
+    def rotate(self, board, counterclockwise=False):
         ''' Transpose rotating to the right '''
         clockwise_outer_coords = [[0, 0], [0, 1], [0, 2], [1, 3],
                                   [2, 4], [3, 3], [4, 2], [4, 1],
@@ -192,52 +186,90 @@ class Board:
             # Rotate three times the outer ring and two times the inner ring
             for t in range(times):
                 last_element = coords[len(coords) - 1]
-                last_value = self.board[last_element[0]][last_element[1]]
+                last_value = board[last_element[0]][last_element[1]]
                 for i in reversed(range((len(coords)))):
                     if i == 0:
                         value = last_value
                     else:
-                        value = self.board[coords[i - 1][0]][coords[i - 1][1]]
-                    self.board[coords[i][0]][coords[i][1]] = value
+                        value = board[coords[i - 1][0]][coords[i - 1][1]]
+                    board[coords[i][0]][coords[i][1]] = value
 
-    def move_left(self):
-        ''' Transpose horizontally, move and retranspose '''
-        self.horizontal_transpose()
-        ret = self.move_right()
-        self.horizontal_transpose()
+    def move_left(self, board=None):
+        ''' Transpose horizontally by rotating 3 times left and retranspose '''
+        if board is None:
+            board = self.board
+        for i in range(3):
+            self.rotate(board, counterclockwise=False)
+        ret = self.move_right(board)
+        for i in range(3):
+            self.rotate(board, counterclockwise=True)
         return ret
 
-    def move_upright(self):
-        self.rotate(counterclockwise=False)
-        ret = self.move_right()
-        self.rotate(counterclockwise=True)
+    def move_upright(self, board=None):
+        if board is None:
+            board = self.board
+        self.rotate(board, counterclockwise=False)
+        ret = self.move_right(board)
+        self.rotate(board, counterclockwise=True)
         return ret
 
-    def move_upleft(self):
+    def move_upleft(self, board=None):
+        if board is None:
+            board = self.board
         for i in range(2):
-            self.rotate(counterclockwise=False)
-        ret = self.move_right()
+            self.rotate(board, counterclockwise=False)
+        ret = self.move_right(board)
         for i in range(2):
-            self.rotate(counterclockwise=True)
-        return ''
-
-    def move_downright(self):
-        self.rotate(counterclockwise=True)
-        ret = self.move_right()
-        self.rotate(counterclockwise=False)
+            self.rotate(board, counterclockwise=True)
         return ret
 
-    def move_downleft(self):
+    def move_downright(self, board=None):
+        if board is None:
+            board = self.board
+        self.rotate(board, counterclockwise=True)
+        ret = self.move_right(board)
+        self.rotate(board, counterclockwise=False)
+        return ret
+
+    def move_downleft(self, board=None):
+        if board is None:
+            board = self.board
         for i in range(2):
-            self.rotate(counterclockwise=True)
-        ret = self.move_right()
+            self.rotate(board, counterclockwise=True)
+        ret = self.move_right(board)
         for i in range(2):
-            self.rotate(counterclockwise=False)
+            self.rotate(board, counterclockwise=False)
         return ret
 
     def exit(self):
         raise ExitException('quiting')
 
+    def print_help(self): 
+        message = '''
+ Join the numbers and get to
+       the 16384 tile!
+
+  W               E
+    .           .
+      .       . 
+        .   .
+A . . . . . . . . . F
+        .   .
+      .       .
+    .           .
+  X               C
+
+ HOW TO PLAY: Use the keys W, E,
+ A, D, Z, X to move the tiles in
+ the six possible directions.
+ When two tiles with the same
+ number touch, they merge into
+ one!'''
+        y = 1
+        for line in message.split('\n'):
+            self.screen.addstr(y, 43, line)
+            y += 1
+            
 
 def curses_main(stdscr):
     ''' Main function called by curses_wrapper once in curses mode '''
@@ -286,12 +318,12 @@ def curses_main(stdscr):
         board.attribs.append(attr)
 
     # Print the text on the right
-    stdscr.addstr(0, 73, '======')
-    stdscr.addstr(1, 73, ' 16384')
-    stdscr.addstr(2, 73, '======')
-    stdscr.addstr(3, 73, 'SCORE:')
-    stdscr.addstr(4, 73, '      ')
-
+    stdscr.addstr(0, 72, '=====')
+    stdscr.addstr(1, 72, '16384')
+    stdscr.addstr(2, 72, '=====')
+    stdscr.addstr(4, 72, 'SCORE:')
+    stdscr.addstr(5, 72, '      ')
+    board.print_help()
     board.check_win(True)    # Put the first 2 2/4 in place
     board.check_win(True)
     while True:
@@ -314,8 +346,9 @@ def curses_main(stdscr):
     stdscr.addstr(11, 40 - (len(s) / 2), frame)
     stdscr.addstr(12, 40 - (len(s) / 2), s)
     stdscr.addstr(13, 40 - (len(s) / 2), frame)
-    s = ('curses-16834 <pablo@odkq.com> JS Original: ' +
-         '<>')
+    s = ('curses_16834_hex,  <pablo@odkq.com>')
+    stdscr.addstr(22, 1, s)
+    s = ('JS Original: http://rudradevbasak.github.io/16384_hex/')
     stdscr.addstr(23, 1, s)
     # Wait for a 'q' to be pressed
     while(stdscr.getch() != 113):
