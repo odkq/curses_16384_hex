@@ -169,8 +169,10 @@ class Board:
                 moved = self.move_row(y, self.width[y], board)
         return some_movement
 
-    def rotate(self, board, counterclockwise=False):
+    def rotate(self, board=None, counterclockwise=False):
         ''' Transpose rotating to the right '''
+        if board is None:
+            board = self.board
         clockwise_outer_coords = [[0, 0], [0, 1], [0, 2], [1, 3],
                                   [2, 4], [3, 3], [4, 2], [4, 1],
                                   [4, 0], [3, 0], [2, 0], [1, 0]]
@@ -246,25 +248,27 @@ class Board:
 
     def print_help(self): 
         message = '''
- Join the numbers and get to
-       the 16384 tile!
+ Join the numbers and
+ get to the 16384 tile!
 
   W               E
     .           .
       .       . 
         .   .
-A . . . . . . . . . F
+A . . . . . . . . . D
         .   .
       .       .
     .           .
-  X               C
+  Z               X
 
  HOW TO PLAY: Use the keys W, E,
  A, D, Z, X to move the tiles in
  the six possible directions.
  When two tiles with the same
  number touch, they merge into
- one!'''
+ one!
+
+ Press q at anytime to exit'''
         y = 1
         for line in message.split('\n'):
             self.screen.addstr(y, 43, line)
@@ -279,9 +283,9 @@ def curses_main(stdscr):
     keys = {119: Board.move_upleft,         # w
             101: Board.move_upright,        # e
             97: Board.move_left,            # a
-            102: Board.move_right,          # f
-            120: Board.move_downleft,       # x
-            99: Board.move_downright,       # c
+            100: Board.move_right,          # f
+            122: Board.move_downleft,       # x
+            120: Board.move_downright,       # c
             114: Board.rotate,
             113: Board.exit}
 
